@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f6feb">
+<title>Photos to PDF</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f6feb'/%3E%3Cpath d='M18 10h20l10 10v34H18z' fill='%23fff'/%3E%3Cpath d='M38 10v10h10z' fill='%23b9d1fb'/%3E%3Ccircle cx='27' cy='31' r='3.5' fill='%23f5b400'/%3E%3Cpath d='M21 48l8-10 5 6 4-4 7 8z' fill='%231f6feb'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #1b1f24; --muted: #6b7280;
+    --line: #dfe2e6; --accent: #1f6feb; --on-accent: #fff; --shade: rgba(0,0,0,.62);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111315; --card: #1c1f23; --text: #e8eaed; --muted: #9aa0a6; --line: #30353b; --accent: #4c8dff; }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+    padding-bottom: calc(150px + env(safe-area-inset-bottom));
+  }
+  header { padding: 16px 16px 4px; }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  h1 { font-size: 20px; margin: 0; white-space: nowrap; }
+  .meta { color: var(--muted); font-size: 13px; line-height: 1.35; text-align: right; }
+  .sub[hidden] { display: none; }
+  #clearBtn { margin-left: auto; }
+  .sub { color: var(--muted); font-size: 14px; margin-top: 2px; display: flex; align-items: center; gap: 10px; min-height: 28px; }
+
+  .bar { display: flex; gap: 6px; align-items: center; padding: 4px 16px 6px; }
+  .btn {
+    appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--text);
+    font: inherit; font-weight: 600; padding: 10px 14px; min-height: 44px; border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    text-decoration: none; cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn.plain { border-color: transparent; background: none; color: var(--muted); font-weight: 500; }
+  .btn:disabled, .btn[aria-disabled=true] { opacity: .45; pointer-events: none; }
+
+  .seg { display: inline-flex; flex-shrink: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
+  .seg button { appearance: none; border: 0; background: none; font: inherit; font-size: 13px; padding: 0 9px; min-height: 36px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .seg button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+  select {
+    font: inherit; font-size: 13px; min-height: 36px; min-width: 0; padding: 0 4px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+  }
+  .clear { appearance: none; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); padding: 4px 6px; margin: -4px 0; white-space: nowrap; cursor: pointer; }
+  .clear[hidden], .select[hidden] { display: none; }
+
+  .select {
+    display: flex; align-items: center; justify-content: center;
+    margin: 8px 16px; min-height: 44px; border: 1.5px dashed var(--line); border-radius: 12px;
+    color: var(--accent); font-weight: 600; cursor: pointer; background: var(--card);
+  }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; padding: 8px 16px; }
+  .card { position: relative; }
+  .card canvas {
+    width: 100%; aspect-ratio: 210 / 297; display: block; background: #fff;
+    border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.18); cursor: zoom-in;
+  }
+  .num { position: absolute; top: 6px; left: 6px; background: var(--shade); color: #fff; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+  .acts { position: absolute; top: 4px; right: 4px; display: flex; gap: 6px; }
+  .icon { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--shade); color: #fff; font-size: 17px; line-height: 1; cursor: pointer; }
+  .cap { font-size: 12px; color: var(--muted); margin-top: 5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  footer {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+    background: var(--card); border-top: 1px solid var(--line);
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  footer .row { display: flex; gap: 8px; align-items: center; }
+  footer .row + .row { margin-top: 8px; }
+  footer .grow { flex: 1; }
+  .status { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .status:empty { display: none; }
+  .name { flex: 1; min-width: 0; display: flex; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 0 10px; min-height: 44px; background: var(--bg); }
+  .name input { flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font: inherit; outline: none; }
+  .name span { color: var(--muted); }
+
+  #viewer { position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.92); display: flex; flex-direction: column; }
+  #viewer[hidden] { display: none; }
+  #viewer .stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 12px; min-height: 0; }
+  #vcanvas { max-width: 100%; max-height: 100%; background: #fff; box-shadow: 0 2px 16px rgba(0,0,0,.5); }
+  #viewer .vbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); color: #fff; }
+  #viewer .btn { background: #2a2d31; border-color: #3a3e44; color: #fff; }
+
+  #toast { position: fixed; left: 50%; bottom: calc(160px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #222; color: #fff; padding: 10px 16px; border-radius: 20px; font-size: 14px; z-index: 20; max-width: calc(100% - 32px); }
+  #toast[hidden] { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="top">
+    <h1>Photos to PDF</h1>
+    <div class="meta">A4 portrait<br>One photo per page</div>
+  </div>
+  <div class="sub" id="subRow" hidden><span id="sub"></span><label class="clear" for="picker" id="addMore" hidden>＋ Add more</label><button class="clear" id="clearBtn" hidden>Clear all</button></div>
+</header>
+
+<input type="file" id="picker" accept="image/*" multiple hidden>
+
+<label class="select" for="picker" id="selectLabel">＋ Select photos</label>
+
+<div class="bar" id="controls" hidden>
+  <div class="seg" role="group" aria-label="Sort order">
+    <button id="sortDate" aria-pressed="true">Date taken</button>
+    <button id="sortSel" aria-pressed="false">Selection</button>
+  </div>
+  <select id="quality" aria-label="PDF quality">
+    <option value="small">Small file</option>
+    <option value="balanced" selected>Balanced size</option>
+    <option value="high">High quality</option>
+  </select>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<footer>
+  <div id="buildPanel">
+    <button class="btn primary" id="createBtn" style="width:100%" disabled>Create PDF</button>
+  </div>
+  <div id="resultPanel" hidden>
+    <div class="row">
+      <label class="name"><input id="fileName" autocomplete="off" spellcheck="false"><span>.pdf</span></label>
+    </div>
+    <div class="row">
+      <a class="btn primary grow" id="downloadBtn">Download</a>
+    </div>
+  </div>
+  <div class="status" id="status"></div>
+</footer>
+
+<div id="viewer" hidden>
+  <div class="stage"><canvas id="vcanvas"></canvas></div>
+  <div class="vbar">
+    <button class="btn" id="vprev" aria-label="Previous page">‹</button>
+    <span id="vlabel"></span>
+    <button class="btn" id="vnext" aria-label="Next page">›</button>
+    <button class="btn" id="vclose">Close</button>
+  </div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script>
+'use strict';
+
+// A4 in PDF points (1 pt = 1/72 inch)
+const A4W = 595.28, A4H = 841.89;
+// Image resolution on the page and JPEG quality for each option
+const QUALITY = {
+  small:    { dpi: 150, q: 0.70 },
+  balanced: { dpi: 200, q: 0.80 },
+  high:     { dpi: 300, q: 0.90 },
+};
+const CARD_W = 300, CARD_H = Math.round(CARD_W * A4H / A4W);
+
+const $ = id => document.getElementById(id);
+const picker = $('picker'), grid = $('grid'), statusEl = $('status');
+
+let items = [];          // { id, order, file, date, exif, rot, thumb, el }
+let seq = 0;             // selection counter
+let sortMode = 'date';
+let busy = false;
+let result = null;       // { blob, url }
+
+/* ---------- Selecting photos ---------- */
+
+picker.onchange = () => {
+  const files = [...picker.files];
+  picker.value = '';
+  if (files.length) addFiles(files);
+};
+
+async function addFiles(files) {
+  const added = files
+    .filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|gif|bmp)$/i.test(f.name))
+    .map(file => ({ id: ++seq, order: seq, file, date: 0, exif: false, rot: 0, thumb: null, el: null }));
+
+  // Read EXIF dates first so the grid appears already sorted
+  await Promise.all(added.map(async it => {
+    const d = await readExifDate(it.file);
+    it.exif = d != null;
+    it.date = d ?? it.file.lastModified ?? 0;
+  }));
+
+  items.push(...added);
+  invalidate();
+  render();
+
+  // Build thumbnails one at a time to keep memory low on phones
+  let skipped = 0;
+  for (const it of added) {
+    try {
+      it.thumb = await withImage(it.file, img => scaledCopy(img, 500));
+      drawCard(it);
+    } catch {
+      skipped++;
+      removeItem(it, true);
+    }
+  }
+  if (skipped) toast(`Skipped ${skipped} image${skipped > 1 ? 's' : ''} that couldn't be read`);
+}
+
+/* ---------- EXIF "date taken" (JPEG only) ---------- */
+
+async function readExifDate(file) {
+  try {
+    const v = new DataView(await file.slice(0, 256 * 1024).arrayBuffer());
+    if (v.getUint16(0) !== 0xFFD8) return null;          // not a JPEG
+    let p = 2;
+    while (p + 10 < v.byteLength) {
+      if (v.getUint8(p) !== 0xFF) return null;
+      const marker = v.getUint8(p + 1);
+      if (marker === 0xDA || marker === 0xD9) return null; // image data starts, no EXIF found
+      const len = v.getUint16(p + 2);
+      if (marker === 0xE1 && v.getUint32(p + 4) === 0x45786966) return parseTiffDate(v, p + 10); // "Exif"
+      p += 2 + len;
+    }
+  } catch {}
+  return null;
+}
+
+function parseTiffDate(v, t) {
+  const le = v.getUint16(t) === 0x4949;                  // "II" = little endian
+  const u16 = o => v.getUint16(t + o, le);
+  const u32 = o => v.getUint32(t + o, le);
+
+  // Returns { tagId: offset of its 4-byte value field }
+  const readIfd = off => {
+    const tags = {}, n = u16(off);
+    for (let i = 0; i < n; i++) {
+      const e = off + 2 + i * 12;
+      tags[u16(e)] = { count: u32(e + 4), val: e + 8 };
+    }
+    return tags;
+  };
+  const readStr = tag => {
+    if (!tag) return '';
+    const off = tag.count > 4 ? u32(tag.val) : tag.val;
+    let s = '';
+    for (let i = 0; i < tag.count; i++) {
+      const c = v.getUint8(t + off + i);
+      if (!c) break;
+      s += String.fromCharCode(c);
+    }
+    return s;
+  };
+
+  const ifd0 = readIfd(u32(4));
+  let when = '', subsec = '';
+  if (ifd0[0x8769]) {                                    // pointer to EXIF sub-IFD
+    const ex = readIfd(u32(ifd0[0x8769].val));
+    when = readStr(ex[0x9003]) || readStr(ex[0x9004]);   // DateTimeOriginal / DateTimeDigitized
+    subsec = readStr(ex[0x9291]);
+  }
+  when = when || readStr(ifd0[0x0132]);                  // DateTime (fallback)
+
+  const m = /^(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/.exec(when);
+  if (!m) return null;
+  const ms = subsec ? Math.round(parseFloat('0.' + subsec.trim()) * 1000) || 0 : 0;
+  const d = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6], ms).getTime();
+  return isNaN(d) ? null : d;
+}
+
+/* ---------- Image helpers ---------- */
+
+// Decodes a file into an <img>, runs fn, then frees the object URL.
+// Browsers apply EXIF orientation automatically when drawing.
+async function withImage(file, fn) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return await fn(img);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function scaledCopy(img, maxSide) {
+  const s = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.naturalWidth * s));
+  c.height = Math.max(1, Math.round(img.naturalHeight * s));
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+
+// Size of the image after rotation
+function rotatedSize(w, h, rot) {
+  return rot % 180 ? [h, w] : [w, h];
+}
+
+// Largest box with the image's aspect ratio that fits on A4, centred
+function fitOnA4(w, h) {
+  const s = Math.min(A4W / w, A4H / h);
+  const bw = w * s, bh = h * s;
+  return { x: (A4W - bw) / 2, y: (A4H - bh) / 2, w: bw, h: bh };
+}
+
+// Draws src rotated by rot degrees so that it fills the box (x, y, w, h)
+function drawRotated(ctx, src, rot, x, y, w, h) {
+  const [dw, dh] = rot % 180 ? [h, w] : [w, h];
+  ctx.save();
+  ctx.translate(x + w / 2, y + h / 2);
+  ctx.rotate(rot * Math.PI / 180);
+  ctx.drawImage(src, -dw / 2, -dh / 2, dw, dh);
+  ctx.restore();
+}
+
+// Draws a white A4 page with the image fitted on it
+function drawPage(ctx, src, srcW, srcH, rot, pageW, pageH) {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, pageW, pageH);
+  const [rw, rh] = rotatedSize(srcW, srcH, rot);
+  const box = fitOnA4(rw, rh), k = pageW / A4W;
+  ctx.imageSmoothingQuality = 'high';
+  drawRotated(ctx, src, rot, box.x * k, box.y * k, box.w * k, box.h * k);
+}
+
+/* ---------- Grid ---------- */
+
+function sortedItems() {
+  const bySel = (a, b) => a.order - b.order;
+  return [...items].sort(sortMode === 'date' ? (a, b) => (a.date - b.date) || bySel(a, b) : bySel);
+}
+
+function cardFor(it) {
+  if (it.el) return it.el;
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.innerHTML = `
+    <canvas width="${CARD_W}" height="${CARD_H}"></canvas>
+    <span class="num"></span>
+    <div class="acts">
+      <button class="icon" data-act="rot" aria-label="Rotate">↻</button>
+      <button class="icon" data-act="del" aria-label="Remove">✕</button>
+    </div>
+    <div class="cap"></div>`;
+  const fmt = new Date(it.date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
+  el.querySelector('.cap').textContent = it.exif ? fmt : `File date ${fmt}`;
+  el.querySelector('canvas').onclick = () => openViewer(it);
+  el.querySelector('[data-act=rot]').onclick = () => { if (busy) return; it.rot = (it.rot + 90) % 360; drawCard(it); invalidate(); };
+  el.querySelector('[data-act=del]').onclick = () => { if (!busy) removeItem(it); };
+  it.el = el;
+  drawCard(it);
+  return el;
+}
+
+function drawCard(it) {
+  if (!it.el) return;
+  const ctx = it.el.querySelector('canvas').getContext('2d');
+  if (it.thumb) {
+    drawPage(ctx, it.thumb, it.thumb.width, it.thumb.height, it.rot, CARD_W, CARD_H);
+  } else {
+    ctx.fillStyle = '#eceef1';
+    ctx.fillRect(0, 0, CARD_W, CARD_H);
+  }
+}
+
+function removeItem(it, silent) {
+  items = items.filter(x => x !== it);
+  if (!silent) invalidate();
+  render();
+}
+
+function render() {
+  const list = sortedItems();
+  list.forEach((it, i) => { cardFor(it).querySelector('.num').textContent = i + 1; });
+  grid.replaceChildren(...list.map(it => it.el));
+
+  const n = items.length;
+  $('selectLabel').hidden = n > 0;
+  $('addMore').hidden = n === 0;
+  $('controls').hidden = n === 0;
+  $('clearBtn').hidden = n < 2;         // with one photo, its own ✕ does the job
+  $('subRow').hidden = n === 0;
+  $('sub').textContent = `${n} page${n > 1 ? 's' : ''}`;
+  $('createBtn').disabled = n === 0 || busy;
+  $('createBtn').textContent = n ? `Create PDF · ${n} page${n > 1 ? 's' : ''}` : 'Create PDF';
+}
+
+function setSort(mode) {
+  sortMode = mode;
+  $('sortDate').setAttribute('aria-pressed', mode === 'date');
+  $('sortSel').setAttribute('aria-pressed', mode === 'sel');
+  invalidate();
+  render();
+}
+$('sortDate').onclick = () => !busy && setSort('date');
+$('sortSel').onclick = () => !busy && setSort('sel');
+$('quality').onchange = invalidate;
+
+$('clearBtn').onclick = () => {
+  if (busy || !confirm('Remove all photos?')) return;
+  items = [];
+  invalidate();
+  render();
+};
+
+/* ---------- Preview ---------- */
+
+let viewIndex = 0, viewToken = 0;
+
+function openViewer(it) {
+  viewIndex = sortedItems().indexOf(it);
+  $('viewer').hidden = false;
+  showPage();
+}
+
+async function showPage() {
+  const list = sortedItems();
+  if (!list.length) return closeViewer();
+  viewIndex = Math.max(0, Math.min(viewIndex, list.length - 1));
+  const it = list[viewIndex];
+  $('vlabel').textContent = `Page ${viewIndex + 1} of ${list.length}`;
+  $('vprev').disabled = viewIndex === 0;
+  $('vnext').disabled = viewIndex === list.length - 1;
+
+  const token = ++viewToken;
+  const c = $('vcanvas');
+  const w = Math.min(1400, Math.round(Math.max(window.innerWidth, window.innerHeight) * (window.devicePixelRatio || 1)));
+  const h = Math.round(w * A4H / A4W);
+  // Show the thumbnail right away, then the sharp version
+  c.width = w; c.height = h;
+  if (it.thumb) drawPage(c.getContext('2d'), it.thumb, it.thumb.width, it.thumb.height, it.rot, w, h);
+  try {
+    await withImage(it.file, img => {
+      if (token === viewToken) drawPage(c.getContext('2d'), img, img.naturalWidth, img.naturalHeight, it.rot, w, h);
+    });
+  } catch {}
+}
+
+function closeViewer() { $('viewer').hidden = true; viewToken++; }
+$('vclose').onclick = closeViewer;
+$('vprev').onclick = () => { viewIndex--; showPage(); };
+$('vnext').onclick = () => { viewIndex++; showPage(); };
+
+/* ---------- PDF creation ---------- */
+
+// Renders one photo as a JPEG sized for the page (never upscaled)
+async function renderPageJpeg(it, dpi, quality) {
+  return withImage(it.file, async img => {
+    const [rw, rh] = rotatedSize(img.naturalWidth, img.naturalHeight, it.rot);
+    const box = fitOnA4(rw, rh);
+    const s = Math.min(1, (box.w / 72 * dpi) / rw);
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(rw * s));
+    c.height = Math.max(1, Math.round(rh * s));
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff';                           // flatten transparent PNGs onto white
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.imageSmoothingQuality = 'high';
+    drawRotated(ctx, img, it.rot, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', quality));
+    const page = { bytes: new Uint8Array(await blob.arrayBuffer()), w: c.width, h: c.height, box };
+    c.width = c.height = 0;                           // release canvas memory (helps iOS)
+    return page;
+  });
+}
+
+// Minimal PDF writer: one A4 page per JPEG
+function buildPdf(pages) {
+  const enc = new TextEncoder(), parts = [], offsets = [];
+  let pos = 0;
+  const push = d => { const b = typeof d === 'string' ? enc.encode(d) : d; parts.push(b); pos += b.length; };
+  const num = n => +n.toFixed(2);
+  const obj = (id, body) => { offsets[id] = pos; push(`${id} 0 obj\n${body}\nendobj\n`); };
+
+  // Object ids: 1 catalog, 2 page tree, then 3 per page (page, content, image)
+  push('%PDF-1.4\n%âãÏÓ\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + i * 3} 0 R`).join(' ')}] /Count ${pages.length} >>`);
+
+  pages.forEach((p, i) => {
+    const pageId = 3 + i * 3, contentId = pageId + 1, imageId = pageId + 2;
+    obj(pageId, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${A4W} ${A4H}] ` +
+      `/Resources << /XObject << /Im0 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+    const draw = `q ${num(p.box.w)} 0 0 ${num(p.box.h)} ${num(p.box.x)} ${num(p.box.y)} cm /Im0 Do Q`;
+    obj(contentId, `<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`);
+    offsets[imageId] = pos;
+    push(`${imageId} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} ` +
+      `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.bytes.length} >>\nstream\n`);
+    push(p.bytes);
+    push('\nendstream\nendobj\n');
+  });
+
+  const count = 3 + pages.length * 3, xrefPos = pos;
+  let xref = `xref\n0 ${count}\n0000000000 65535 f \n`;
+  for (let i = 1; i < count; i++) xref += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
+  push(`${xref}trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
+  return new Blob(parts, { type: 'application/pdf' });
+}
+
+$('createBtn').onclick = async () => {
+  if (busy || !items.length) return;
+  busy = true;
+  render();
+  const { dpi, q } = QUALITY[$('quality').value];
+  const list = sortedItems(), pages = [];
+  try {
+    for (let i = 0; i < list.length; i++) {
+      statusEl.textContent = `Processing page ${i + 1} of ${list.length}…`;
+      pages.push(await renderPageJpeg(list[i], dpi, q));
+    }
+    const blob = buildPdf(pages);
+    result = { blob, url: URL.createObjectURL(blob) };
+    $('fileName').value = defaultName();
+    updateDownload();
+    $('buildPanel').hidden = true;
+    $('resultPanel').hidden = false;
+    statusEl.textContent = `Ready · ${list.length} page${list.length > 1 ? 's' : ''} · ${formatSize(blob.size)}`;
+  } catch (e) {
+    statusEl.textContent = 'Something went wrong while creating the PDF. Try "Small file" or fewer photos.';
+    console.error(e);
+  } finally {
+    busy = false;
+    render();
+  }
+};
+
+// Any change to pages or settings discards the built PDF
+function invalidate() {
+  if (result) URL.revokeObjectURL(result.url);
+  result = null;
+  $('resultPanel').hidden = true;
+  $('buildPanel').hidden = false;
+  statusEl.textContent = '';
+}
+
+function fileName() {
+  const n = $('fileName').value.trim().replace(/\.pdf$/i, '').replace(/[\\/:*?"<>|]+/g, '-');
+  return (n || defaultName()) + '.pdf';
+}
+function defaultName() {
+  const d = new Date(), p = x => String(x).padStart(2, '0');
+  return `Scan ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}${p(d.getMinutes())}`;
+}
+function updateDownload() {
+  if (!result) return;
+  $('downloadBtn').href = result.url;
+  $('downloadBtn').download = fileName();
+}
+$('fileName').oninput = updateDownload;
+
+/* ---------- Misc ---------- */
+
+function formatSize(b) {
+  return b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 3000);
+}
+
+render();
+</script>
+</body>
+</html>
