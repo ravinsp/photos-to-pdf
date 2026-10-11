@@ -40,13 +40,21 @@
   .btn.plain { border-color: transparent; background: none; color: var(--muted); font-weight: 500; }
   .btn:disabled, .btn[aria-disabled=true] { opacity: .45; pointer-events: none; }
 
-  .seg { display: inline-flex; flex-shrink: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
-  .seg button { appearance: none; border: 0; background: none; font: inherit; font-size: 13px; padding: 0 9px; min-height: 36px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .seg { display: inline-flex; flex: 1 0 auto; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
+  .seg button { flex: 1; appearance: none; border: 0; background: none; font: inherit; font-size: 13px; padding: 0 8px; min-height: 36px; color: var(--muted); cursor: pointer; white-space: nowrap; }
   .seg button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
   select {
-    font: inherit; font-size: 13px; min-height: 36px; min-width: 0; padding: 0 4px; border-radius: 10px;
+    flex: 1 1 auto; font: inherit; font-size: 13px; min-height: 36px; min-width: 0; padding: 0 4px; border-radius: 10px;
     border: 1px solid var(--line); background: var(--card); color: var(--text);
   }
+  .tog {
+    appearance: none; flex-shrink: 0; width: 36px; height: 36px; padding: 0; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .tog svg { width: 22px; height: 22px; }
+  /* Show the icon that matches the current mode */
+  .tog[aria-pressed=true] .ic-color, .tog[aria-pressed=false] .ic-gray { display: none; }
   .clear { appearance: none; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); padding: 4px 6px; margin: -4px 0; white-space: nowrap; cursor: pointer; }
   .clear[hidden], .select[hidden] { display: none; }
 
@@ -88,6 +96,9 @@
   #viewer .vbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); color: #fff; }
   #viewer .btn { background: #2a2d31; border-color: #3a3e44; color: #fff; }
 
+  /* Grayscale preview; the PDF itself is converted in renderPageJpeg */
+  body.gray .card canvas, body.gray #vcanvas { filter: grayscale(1); }
+
   #toast { position: fixed; left: 50%; bottom: calc(160px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #222; color: #fff; padding: 10px 16px; border-radius: 20px; font-size: 14px; z-index: 20; max-width: calc(100% - 32px); }
   #toast[hidden] { display: none; }
 </style>
@@ -108,14 +119,27 @@
 
 <div class="bar" id="controls" hidden>
   <div class="seg" role="group" aria-label="Sort order">
-    <button id="sortDate" aria-pressed="true">Date taken</button>
-    <button id="sortSel" aria-pressed="false">Selection</button>
+    <button id="sortDate" aria-pressed="true" title="Sort by date taken">Date</button>
+    <button id="sortSel" aria-pressed="false" title="Sort by the order you picked photos">Picked</button>
   </div>
-  <select id="quality" aria-label="PDF quality">
-    <option value="small">Small file</option>
-    <option value="balanced" selected>Balanced size</option>
-    <option value="high">High quality</option>
+  <select id="quality" aria-label="PDF quality" title="PDF quality">
+    <option value="small">Small</option>
+    <option value="balanced" selected>Balanced</option>
+    <option value="high">HQ</option>
   </select>
+  <button class="tog" id="grayBtn" aria-label="Grayscale PDF" aria-pressed="false" title="Color PDF · tap for black &amp; white">
+    <svg class="ic-color" viewBox="0 0 24 24" aria-hidden="true">
+      <g style="mix-blend-mode:multiply">
+        <circle cx="12" cy="8.5" r="5.5" fill="#ff5a5f"/>
+        <circle cx="8.5" cy="14.5" r="5.5" fill="#3ec46d"/>
+        <circle cx="15.5" cy="14.5" r="5.5" fill="#3d8bff"/>
+      </g>
+    </svg>
+    <svg class="ic-gray" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/>
+    </svg>
+  </button>
 </div>
 
 <div class="grid" id="grid"></div>
@@ -166,6 +190,7 @@ const picker = $('picker'), grid = $('grid'), statusEl = $('status');
 let items = [];          // { id, order, file, date, exif, rot, thumb, el }
 let seq = 0;             // selection counter
 let sortMode = 'date';
+let grayscale = false;
 let busy = false;
 let result = null;       // { blob, url }
 
@@ -400,6 +425,16 @@ $('sortDate').onclick = () => !busy && setSort('date');
 $('sortSel').onclick = () => !busy && setSort('sel');
 $('quality').onchange = invalidate;
 
+function setGrayscale(on) {
+  grayscale = on;
+  const btn = $('grayBtn');
+  btn.setAttribute('aria-pressed', on);
+  btn.title = on ? 'Black & white PDF · tap for color' : 'Color PDF · tap for black & white';
+  document.body.classList.toggle('gray', on);
+  invalidate();
+}
+$('grayBtn').onclick = () => !busy && setGrayscale(!grayscale);
+
 $('clearBtn').onclick = () => {
   if (busy || !confirm('Remove all photos?')) return;
   items = [];
@@ -447,8 +482,18 @@ $('vnext').onclick = () => { viewIndex++; showPage(); };
 
 /* ---------- PDF creation ---------- */
 
+// Converts canvas pixels to gray using standard luma weights
+function toGrayscale(ctx, w, h) {
+  const data = ctx.getImageData(0, 0, w, h);
+  const px = data.data;
+  for (let i = 0; i < px.length; i += 4) {
+    px[i] = px[i + 1] = px[i + 2] = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+  }
+  ctx.putImageData(data, 0, 0);
+}
+
 // Renders one photo as a JPEG sized for the page (never upscaled)
-async function renderPageJpeg(it, dpi, quality) {
+async function renderPageJpeg(it, dpi, quality, gray) {
   return withImage(it.file, async img => {
     const [rw, rh] = rotatedSize(img.naturalWidth, img.naturalHeight, it.rot);
     const box = fitOnA4(rw, rh);
@@ -461,6 +506,7 @@ async function renderPageJpeg(it, dpi, quality) {
     ctx.fillRect(0, 0, c.width, c.height);
     ctx.imageSmoothingQuality = 'high';
     drawRotated(ctx, img, it.rot, 0, 0, c.width, c.height);
+    if (gray) toGrayscale(ctx, c.width, c.height);
     const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', quality));
     const page = { bytes: new Uint8Array(await blob.arrayBuffer()), w: c.width, h: c.height, box };
     c.width = c.height = 0;                           // release canvas memory (helps iOS)
@@ -510,7 +556,7 @@ $('createBtn').onclick = async () => {
   try {
     for (let i = 0; i < list.length; i++) {
       statusEl.textContent = `Processing page ${i + 1} of ${list.length}…`;
-      pages.push(await renderPageJpeg(list[i], dpi, q));
+      pages.push(await renderPageJpeg(list[i], dpi, q, grayscale));
     }
     const blob = buildPdf(pages);
     result = { blob, url: URL.createObjectURL(blob) };
@@ -520,7 +566,7 @@ $('createBtn').onclick = async () => {
     $('resultPanel').hidden = false;
     statusEl.textContent = `Ready · ${list.length} page${list.length > 1 ? 's' : ''} · ${formatSize(blob.size)}`;
   } catch (e) {
-    statusEl.textContent = 'Something went wrong while creating the PDF. Try "Small file" or fewer photos.';
+    statusEl.textContent = 'Something went wrong while creating the PDF. Try "Small" quality or fewer photos.';
     console.error(e);
   } finally {
     busy = false;
