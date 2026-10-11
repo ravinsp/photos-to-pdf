@@ -23,20 +23,21 @@ Stop the server with `Ctrl+C`.
 ## Features
 
 - **Select photos**: pick several images at once, and add more later with **＋ Add more**.
-- **Sort order**: sort by **Date taken** (read from the JPEG's EXIF data, or the file's modified date if there is none) or by **Selection** order.
+- **Sort order**: sort by **Date** taken (read from the JPEG's EXIF data, or the file's modified date if there is none) or by **Picked** order (the order you selected them).
 - **Per-page controls**: rotate (↻) or remove (✕) any page. Tap a page to preview it full screen.
 - **Quality**:
 
   | Option | Resolution | JPEG quality |
   |---|---|---|
-  | Small file | 150 dpi | 70% |
-  | Balanced size | 200 dpi | 80% |
-  | High quality | 300 dpi | 90% |
+  | Small | 150 dpi | 70% |
+  | Balanced | 200 dpi | 80% |
+  | High | 300 dpi | 90% |
 
+- **Color mode**: tap the color toggle next to the quality option to switch between a full-color PDF (colored circles icon) and a grayscale one (half-filled circle icon). The page previews follow the setting.
 - **Layout**: each photo is scaled to fit an A4 page and centred on it. Photos are never enlarged beyond their original resolution.
 - **Download**: after **Create PDF**, rename the file if you want, then **Download**.
 
 ## Notes
 
 - Formats such as HEIC work only in browsers that can decode them natively (e.g. Safari).
-- Changing the photos, their order, rotation or quality discards the PDF you created, and you need to create it again.
+- Changing the photos, their order, rotation, quality or color mode discards the PDF you created, and you need to create it again.
